@@ -1,0 +1,52 @@
+--- # My Playbook for Installing POSTGRES and NGINX
+- hosts: aptserver
+  user: test 
+  sudo: yes
+  connection: ssh
+  gather_facts: no
+  tasks:
+    - name: Update all packages 
+      raw: apt-get update
+    - name: Make sure that the apt cache is up to date
+      apt: update_cache=yes
+    - name: Installing NGINX Web Server
+      apt: pkg=nginx state=installed update_cache=true
+      notify: start nginx
+    - name: Installing Postgresql
+      apt: name={{item}}
+      with_items:
+        - postgresql
+        - libpq-dev
+        - python-psycopg2
+      notify: start postgres
+    - name: Starting Postgres
+      service: name=postgresql state=restarted   
+- hosts: aptserver
+  sudo: yes
+  sudo_user: postgres
+  gather_facts: no
+  vars:
+    dbname: db
+    dbuser: nihel
+    dbpassword: nihel
+  tasks:
+    - name: ensure database is created
+      postgresql_db: name={{dbname}}
+    - name: ensure user has access to database
+      postgresql_user: db={{dbname}} name={{dbuser}} password={{dbpassword}} priv=ALL
+    - name: ensure user does not have unnecessary privilege
+      postgresql_user: name={{dbuser}} role_attr_flags=NOSUPERUSER,NOCREATEDB
+    - name: Create table mytab
+      command: psql -d db -U nihel -c "CREATE TABLE IF NOT EXISTS mytab (name varchar(20), age varchar(10));"
+    - name: Insert into table
+      command: psql -d db -U nihel -c "INSERT INTO mytab VALUES ('hh','24');"
+    - name: Display data from table
+      command: psql -d db -U nihel -c "SELECT * FROM mytab;"
+      register: result
+    - debug: var=result
+  handlers:
+    - name: start nginx
+      service: name=nginx state=restarted
+    - name: start postgres
+      service: name=postgresql state=restarted
+   
